@@ -24,4 +24,4 @@ def min_edit_distance(source, target):
     return D[n][m]
 
 
-print(min_edit_distance('selamlar', 'ayaklanalım'))
+print(min_edit_distance('allah', 'arakla'))
