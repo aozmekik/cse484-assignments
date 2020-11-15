@@ -1,4 +1,5 @@
 import random
+import sys
 
 MAX_CHAR_LONG = 15
 
@@ -67,11 +68,12 @@ def is_found(d, i, cost):
 
 def fill_row(source, target, d, i):
     min_cost = MAX_CHAR_LONG
-    margin = len(d[0]) - len(d) if len(d[0]) > len(d) else 1
+    # margin = len(d[0]) - len(d) if len(d[0]) >= len(d) else 0
+    margin = len(d[0]) - (len(d) - i + 1) 
 
     for jy in range(1, len(d[0])):
         cost = find_cost(source, target, d, i, jy)
-        if jy >= margin + i:
+        if jy >= margin:
             min_cost = min(cost, min_cost)
 
     set_cursor(d, i+1, min_cost)
@@ -82,15 +84,22 @@ def fill(source, target, d, cost):
     i, row_cost = get_cursor(d)
 
     go = row_cost <= cost
-    found = is_found(d, i - 1, cost)
-    while go and not found:
+
+    if is_finished(d, i-1):
+        if is_found(d, i-1, cost):
+            return True
+        go = False
+
+    # found = is_found(d, i - 1, cost)
+    finished = False
+    while go and not finished:
         i, row_cost = get_cursor(d)
 
         row_cost = fill_row(source, target, d, i)
 
-        found = is_found(d, i, cost)
+        finished = is_finished(d, i)
         go = row_cost <= cost
-    return found
+    return is_found(d, i, cost)
 
 
 def report_density(D):
@@ -109,7 +118,7 @@ def report_density(D):
 
 def report_found(D, word_dict, found):
     print('Top {} words with their edit distance'.format(len(found)))
-    for i in found:
+    for i in sorted(found, key= lambda i: D[i][-1][-1]):
         d = D[i]
         word = word_dict[i]
         edit_distance = d[-1][-1]
@@ -145,9 +154,15 @@ def enhanced_min_edit(source, word_dict):
 
 
 def menu():
-    word_dict = read_file('dataset/sample1.txt')
-    source = input('Enter the main word: ')
+    # you can change the dataset sample here.
+    if len(sys.argv) < 3:
+        print('Missing arguments.\nExample usage: ./program wordlist.txt word')
+        exit(-1)
+    word_dict = read_file(sys.argv[1])
+    source = sys.argv[2]
 
+    print('Source word:', source)
+    print('Dictionary:', sys.argv[1])
     words = enhanced_min_edit(source, word_dict)
 
 
