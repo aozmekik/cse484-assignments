@@ -2,6 +2,8 @@ import random
 import re
 from nltk import ngrams, trigrams
 from collections import Counter, defaultdict
+from sgt import SimpleGoodTuring
+import numpy as np
 
 # TASKS.
 # TODO. gt-smoothing.
@@ -18,7 +20,7 @@ def read_file(file):
 
 def normalize(X):
     # just lower case letters.
-    return re.sub(r'[^A-Za-z. ]', '', X.lower().strip())
+    return X.lower().strip()
 
 
 def split(X, ratio=0.05):
@@ -41,7 +43,7 @@ def get_sample(file, sample_name, N=20):
         file.write(X)
 
 
-def smooth(M, words, n):
+def smooth(M, words, n, wi=None):
     Nc = defaultdict(lambda: 0)
     N = 0
     if n == 1:
@@ -52,30 +54,42 @@ def smooth(M, words, n):
             N += c
 
         # unigrams that never occured
-        Nc[0] = len(words) - N
+        # Nc[0] = len(words) - N
+        Nc[0] = 1  # FIXME.
 
         for w in M:
             c = M[w]
-            M[w] = (c + 1) * (N[c+1]/N[c])
+            M[w] = (c + 1) * (Nc[c+1]/Nc[c])
     else:
+        M_temp = defaultdict(lambda: 0)
         # count all the counts
         for wi in M:
             for wj in M[wi]:
                 c = M[wi][wj]
                 Nc[c] += 1
                 N += c
+                M_temp[wi + (wj,)] = c
 
         # ngrams that never occured
         Nc[0] = len(words)**n - N
+        print(max(Nc))
+
+        M_temp, M_temp_keys = SimpleGoodTuring(M_temp, max(Nc)).run_sgt()
+        X = {}
+        for i, _ in enumerate(M_temp):
+            X[M_temp_keys[i]] = M_temp[i]
 
         # apply good turing smoothing
         for wi in M:
             for wj in M[wi]:
                 c = M[wi][wj]
-                M[wi][wj] = (c + 1) * (N[c+1]/N[c])
+                M[wi][wj] = X[c]
+            M[wi][-1] = Nc[1] / Nc[0]
+        M[-1][-1] = (Nc[1] / Nc[0]) / N
+        print(M[-1][-1])
 
     # revised count for ngrams that never occured
-    M[None] = N[1] / N[0]
+    # M[None] = Nc[1] / Nc[0]  # FIX
 
 
 def model(words, n):
@@ -99,14 +113,17 @@ def model(words, n):
 
         # smooth
         smooth(M, words, n)
+        # M_temp = smooth(M, words, n)
 
+        # for w in M:
+        #     M[w] /= M_count[w[: n-1]]
         # counts to probabilities
         for wi in M:
-            total_count = float(sum(M[wi].values()))
-            for wj in M[wi]:
-                M[wi][wj] /= total_count
-            M[wi][None] /= M[None]
-
+            if wi != -1:
+                total_count = float(sum(M[wi].values()))
+                for wj in M[wi]:
+                    M[wi][wj] /= total_count
+                M[wi][-1] /= total_count
     return M
 
 
@@ -124,21 +141,36 @@ def test_models(Ms, Y):
     return PPs
 
 
-def p(model, w1, w2=None):
-    n = len(w1)  # size of model.
-    if n == 1:  # unigram
-        return model[w1]
+def p(M, w1, w2):
+    # if not w2:  # unigram
+    #     return M[w1] if M[w1] else M[None]
+    if w1 in M:
+        if w2 in M[w1]:
+            X = M[w1][w2]
+        else:
+            X = M[w1][-1]
     else:
-        return model[w1][w2]
+        X = M[-1][-1]
+    return X
 
 
 def pp(M, Y, unigram=False):
-    x = 0
+    x = 1
     N = len(Y)
-    for i in range(N):
-        x *= 1/p(M, Y[i], Y[i-1] if not unigram else None)
+    for i in range(1, N):
+        print(p(M, Y[i-1], Y[i]))
+        x *= 1/p(M, Y[i-1], Y[i])
     return x**(1/N)
 
 
 X, Y = split(read_file('sample0.txt'))
-Ms = build_models(X)
+
+M = model(X, 2)
+print(M[-1][-1])
+PP = pp(M, Y)
+print('Perplexity of {}-gram: {}'.format(2, PP))
+
+# Ms = build_models(X)
+# PPs = test_models(Ms, Y)
+# for i, PP in enumerate(PPs):
+#     print('Perplexity of {}-gram: {}'.format(i, PP))
