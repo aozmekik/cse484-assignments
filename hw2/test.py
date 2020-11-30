@@ -5,23 +5,38 @@ from collections import Counter, defaultdict
 from sgt import SimpleGoodTuring
 import numpy as np
 import math
+import operator
+import string
 
 # TASKS.
-# TODO. gt-smoothing.
 # TODO. produce random sentences.
-#
 
 
 def read_file(file):
     X = []
     with open(file, 'r', encoding='utf-8', errors='ignore') as file:
-        X = normalize(file.read()).split()
+        X = normalize(file.read())
     return X
 
 
 def normalize(X):
-    # just lower case letters.
-    return X.lower().strip()
+    print('normalizing data...')
+    X = X.lower().strip()
+    noise = ['style', 'text', 'align', 'left', 'width', 'table',
+             'layout',  'fixed', 'border', 'valign', 'top', 'da',
+             'class', 'wikitable', 'dosya', 'ico', 'jpg', 'center',
+             'background', 'faff', 'padding', 'em', 'px', 'solid', 'ddd',
+             'margin', 'auto', 'solid', 'ddd', 'margin', 'auto', 'cellspacing']
+    for n in noise:
+        X = X.replace(n, '')
+    one_letter = list(string.ascii_lowercase + 'ıîâöçşiğü')
+    X = X.split()
+    for one in one_letter:
+        X = list(filter((one).__ne__, X))
+    # two_letter = [a + b for a in one_letter for b in one_letter]
+    # for two in two_letter:
+    #     X = X.replace(two, '')
+    return X
 
 
 def split(X, ratio=0.05):
@@ -39,58 +54,9 @@ def get_sample(file, sample_name, N=20):
     X = read_file(file)
     print(int(len(X) * (N/100)))
     X = ' '.join([X[i] for i in range(int(len(X) * (N/100)))])
-    # words = ' '.join([word for word in words])
     with open(sample_name, 'w', encoding='utf-8') as file:
         file.write(X)
 
-
-# def smooth(M, words, n, wi=None):
-#     Nc = defaultdict(lambda: 0)
-#     N = 0
-#     if n == 1:
-#         # count all the counts
-#         for w in M:
-#             c = M[w]
-#             Nc[c] += 1
-#             N += c
-
-#         # unigrams that never occured
-#         # Nc[0] = len(words) - N
-#         Nc[0] = 1  # FIXME.
-
-#         for w in M:
-#             c = M[w]
-#             M[w] = (c + 1) * (Nc[c+1]/Nc[c])
-#     else:
-#         M_temp = defaultdict(lambda: 0)
-#         # count all the counts
-#         for wi in M:
-#             for wj in M[wi]:
-#                 c = M[wi][wj]
-#                 Nc[c] += 1
-#                 N += c
-#                 M_temp[wi + (wj,)] = c
-
-#         # ngrams that never occured
-#         Nc[0] = len(words)**n - N
-#         print(max(Nc))
-
-#         M_temp, M_temp_keys = SimpleGoodTuring(M_temp, max(Nc)).run_sgt()
-#         X = {}
-#         for i, _ in enumerate(M_temp):
-#             X[M_temp_keys[i]] = M_temp[i]
-
-#         # apply good turing smoothing
-#         for wi in M:
-#             for wj in M[wi]:
-#                 c = M[wi][wj]
-#                 M[wi][wj] = X[c]
-#             M[wi][-1] = Nc[1] / Nc[0]
-#         M[-1][-1] = (Nc[1] / Nc[0]) / N
-#         print(M[-1][-1])
-
-#     # revised count for ngrams that never occured
-#     # M[None] = Nc[1] / Nc[0]  # FIX
 
 def gen_c(Nc, c):
     m = max(Nc.keys())
@@ -106,47 +72,51 @@ def gen_c(Nc, c):
         Nc[c] = (Nc[c_above] + Nc[c_below]) / 2
 
 
-def smooth(M, words, n, wi=None):
+def smooth_and_prob(M, words, n, wi=None):
     Nc = defaultdict(lambda: 0)
     N = 0
 
     if n == 1:
         # count all the counts
+        N = len(M)
         for w in M:
             c = M[w]
             Nc[c] += 1
-            N += c
 
-        # unigrams that never occured
-        # Nc[0] = len(words) - N
-        Nc[0] = 1  # FIXME.
+        Nc[0] = Nc[1] / N
 
         for w in M:
             c = M[w]
-            if c not in Nc:
-                gen_c(Nc, c)
-            M[w] = (c + 1) * (Nc[c+1]/Nc[c])
-
-    for wi in M:
-        for wj in M[wi]:
-            c = M[wi][wj]
-            Nc[c] += 1
-            N += c
-
-    # ngrams that never occured
-    Nc[0] = len(words)**n - N
-
-    # apply good turing smoothing
-    for wi in M:
-        for wj in M[wi]:
-            c = M[wi][wj]
             if c not in Nc:
                 gen_c(Nc, c)
             if c + 1 not in Nc:
                 gen_c(Nc, c + 1)
-            M[wi][wj] = (c + 1) * (Nc[c+1]/Nc[c])
-        M[wi][-1] = Nc[1] / Nc[0]
-    M[-1][-1] = (Nc[1] / Nc[0]) / N
+            c = ((c + 1) * (Nc[c+1]/Nc[c]))
+            M[w] = c / N
+        M[-1] = Nc[0]
+
+    else:
+        for wi in M:
+            for wj in M[wi]:
+                c = M[wi][wj]
+                Nc[c] += 1
+                N += c
+
+        # ngrams that never occured
+        Nc[0] = Nc[1] / N
+
+        # apply good turing smoothing
+        for wi in M:
+            total_count = float(sum(M[wi].values()))
+            for wj in M[wi]:
+                c = M[wi][wj]
+                if c not in Nc:
+                    gen_c(Nc, c)
+                if c + 1 not in Nc:
+                    gen_c(Nc, c + 1)
+                M[wi][wj] = ((c + 1) * (Nc[c+1]/Nc[c])) / total_count
+            M[wi][-1] = Nc[0] / total_count
+        M[-1][-1] = Nc[0]
 
 
 def model(words, n):
@@ -155,13 +125,8 @@ def model(words, n):
         counter = Counter(ngrams(words, 1))
         M = {word[0]: counter[word] for word in counter}
 
-        # smooth
-        smooth(M, words, n)
-
-        # counts to probabilities
-        total_count = float(sum(M.values()))
-        for w in M:
-            M[w] /= total_count
+        # smooth and counts to probabilities
+        smooth_and_prob(M, words, n)
     else:
         # count
         M = defaultdict(lambda: defaultdict(lambda: 0))
@@ -169,64 +134,102 @@ def model(words, n):
             M[w[: n-1]][w[-1]] += 1
 
         # smooth
-        smooth(M, words, n)
-        # M_temp = smooth(M, words, n)
-
-        # for w in M:
-        #     M[w] /= M_count[w[: n-1]]
-        # counts to probabilities
-        for wi in M:
-            if wi != -1:
-                total_count = float(sum(M[wi].values()))
-                for wj in M[wi]:
-                    M[wi][wj] /= total_count
-                M[wi][-1] /= total_count
+        smooth_and_prob(M, words, n)
     return M
 
 
 def build_models(X):
     Ms = []
+    print('Building models...')
     for n in range(1, 6):
+        print('\tBuilding {}-gram...'.format(n))
         Ms.append(model(X, n))
     return Ms
 
 
 def test_models(Ms, Y):
-    PPs = [PPs.append(Ms[0], Y, unigram=True)]
-    for M in Ms[1:]:
+    print('Testing models...')
+    print('\tTesting 1-gram...')
+    PPs = [pp(Ms[0], Y, unigram=True)]
+    for i, M in enumerate(Ms[1:]):
+        print('\tTesting {}-gram...'.format(i+1))
         PPs.append(pp(M, Y))
     return PPs
 
 
 def p(M, w1, w2):
     if not w2:  # unigram
-        return M[w1] if M[w1] else M[None]
-    if w1 in M:
-        if w2 in M[w1]:
-            X = M[w1][w2]
-        else:
-            X = M[w1][-1]
+        return M[w1] if w1 in M else M[-1]
     else:
-        X = M[-1][-1]
-    return X
+        if w1 in M:
+            if w2 in M[w1]:
+                return M[w1][w2]
+            else:
+                return M[w1][-1]
+        else:
+            return M[-1][-1]
 
 
 def pp(M, Y, unigram=False):
     x = 0
     N = len(Y)
     for i in range(1, N):
-        x += math.log2(p(M, Y[i-1], Y[i]))
-    return x/N
+        x += math.log2(p(M, Y[i-1], Y[i] if not unigram else None))
+    return 2**(-x/N)
 
-# get_sample('data/trwiki', 'big_sample.txt')
-X, Y = split(read_file('sample0.txt'))
 
-M = model(X, 2)
-print(M[-1][-1])
-PP = pp(M, Y)
-print('Perplexity of {}-gram: {}'.format(2, PP))
+def gen_S(M, unigram=False):
+    S = ''
+    W = M
+    if not unigram:
+        W = {}
+        for wi in M:
+            for wj in M[wi]:
+                if wi != -1 or wj != -1:
+                    W[wi + (wj, )] = M[wi][wj]
+    n = 0
+    while n < 5:
+        X = max(W.items(), key=operator.itemgetter(1))[0]
+        if X and X != -1 and (X[0] if type(X) is tuple else True):
+            if type(X) is tuple:
+                if -1 in X:
+                    del W[X]
+                    continue
+                for x in X:
+                    S += ' ' + (x if x != -1 else '')
+            else:
+                S += ' ' + X
+            n += 1
+        del W[X]
+            
 
-# Ms = build_models(X)
-# PPs = test_models(Ms, Y)
-# for i, PP in enumerate(PPs):
-#     print('Perplexity of {}-gram: {}'.format(i, PP))
+    return S
+
+
+def test_S(Ms):
+    print('Generating Sentences...')
+    print('\t Generating Sentence for: 1-gram...')
+    Ss = [gen_S(Ms[0], unigram=True)]
+    for i, M in enumerate(Ms[1:]):
+        print('\tGenerating Sentence for {}-gram...'.format(i+1))
+        Ss.append(gen_S(M))
+    return Ss
+
+
+# get_sample('data/trwiki', 'big_sample.txt', N=30)
+X, Y = split(read_file('sample1.txt'))
+
+
+# M = model(X, 5)
+# S = gen_sentence(M)
+# print(S)
+
+Ms = build_models(X)
+PPs = test_models(Ms, Y)
+Ss = test_S(Ms)
+
+for i, PP in enumerate(PPs):
+    print('Perplexity of {}-gram: {}'.format(i + 1, PP))
+
+for i, S in enumerate(Ss):
+    print('Sentence for {}-gram: {}'.format(i + 1, S))
