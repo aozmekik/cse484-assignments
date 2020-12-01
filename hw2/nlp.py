@@ -225,14 +225,18 @@ def test_S(Ms):
 # get_sample('data/trwiki', 'big_sample.txt', N=30)
 
 
-X, Y = split(read_file('sample1.txt'))
+X, Y = split(read_file('sample0.txt'))
 
-Ms = build_models(X)
-PPs = test_models(Ms, Y)
+M = model(X, 2)
+PP = pp(M, Y, 2)
+print(PP)
 
-for i, PP in enumerate(PPs):
-    print('Perplexity of {}-gram: {}'.format(i + 1, PP))
+# Ms = build_models(X)
+# PPs = test_models(Ms, Y)
 
-Ss = test_S(Ms)
-for i, S in enumerate(Ss):
-    print('Word for {}-gram: {}'.format(i + 1, S))
+# for i, PP in enumerate(PPs):
+#     print('Perplexity of {}-gram: {}'.format(i + 1, PP))
+
+# Ss = test_S(Ms)
+# for i, S in enumerate(Ss):
+#     print('Word for {}-gram: {}'.format(i + 1, S))
