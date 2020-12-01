@@ -1,15 +1,9 @@
-import random
-import re
-from nltk import ngrams, trigrams
-from collections import Counter, defaultdict
-from sgt import SimpleGoodTuring
-import numpy as np
+from nltk import ngrams
+from collections import defaultdict
 import math
 import operator
 import string
-
-# TASKS.
-# TODO. produce random sentences.
+import random
 
 
 def read_file(file):
@@ -33,9 +27,6 @@ def normalize(X):
     X = X.split()
     for one in one_letter:
         X = list(filter((one).__ne__, X))
-    # two_letter = [a + b for a in one_letter for b in one_letter]
-    # for two in two_letter:
-    #     X = X.replace(two, '')
     return X
 
 
@@ -119,22 +110,27 @@ def smooth_and_prob(M, words, n, wi=None):
         M[-1][-1] = Nc[0]
 
 
+def get_ngram(word, n):
+    return ngrams(word, n, pad_right=True, pad_left=True, left_pad_symbol='<l>', right_pad_symbol='</l>')
+
+
 def model(words, n):
     if n == 1:
         # count
-        counter = Counter(ngrams(words, 1))
-        M = {word[0]: counter[word] for word in counter}
+        M = defaultdict(lambda: 0)
+        for word in words:
+            for w in get_ngram(word, n):
+                M[w] += 1
 
-        # smooth and counts to probabilities
-        smooth_and_prob(M, words, n)
     else:
         # count
         M = defaultdict(lambda: defaultdict(lambda: 0))
-        for w in ngrams(words, n, pad_right=True, pad_left=True):
-            M[w[: n-1]][w[-1]] += 1
+        for word in words:
+            for w in get_ngram(word, n):
+                M[w[: n-1]][w[-1]] += 1
 
-        # smooth
-        smooth_and_prob(M, words, n)
+    # smooth and counts to probabilities
+    smooth_and_prob(M, words, n)
     return M
 
 
@@ -150,18 +146,22 @@ def build_models(X):
 def test_models(Ms, Y):
     print('Testing models...')
     print('\tTesting 1-gram...')
-    PPs = [pp(Ms[0], Y, unigram=True)]
-    for i, M in enumerate(Ms[1:]):
-        print('\tTesting {}-gram...'.format(i+1))
-        PPs.append(pp(M, Y))
+    PPs = [pp(Ms[0], Y, 1)]
+    i = 2
+    for M in Ms[1:]:
+        print('\tTesting {}-gram...'.format(i))
+        PPs.append(pp(M, Y, i))
+        i += 1
     return PPs
 
 
-def p(M, w1, w2):
-    if not w2:  # unigram
-        return M[w1] if w1 in M else M[-1]
+def p(M, w, n):
+    if n == 1:  # unigram
+        return M[w] if w in M else M[-1]
     else:
+        w1 = w[: -1]
         if w1 in M:
+            w2 = w[-1]
             if w2 in M[w1]:
                 return M[w1][w2]
             else:
@@ -170,66 +170,69 @@ def p(M, w1, w2):
             return M[-1][-1]
 
 
-def pp(M, Y, unigram=False):
+def pp(M, Y, n):
     x = 0
     N = len(Y)
-    for i in range(1, N):
-        x += math.log2(p(M, Y[i-1], Y[i] if not unigram else None))
+    for word in Y:
+        for y in get_ngram(word, n):
+            x += math.log2(p(M, y, n))
     return 2**(-x/N)
 
 
-def gen_S(M, unigram=False):
-    S = ''
+def gen_S(M, n):
+    # different word generating strategy has been applied to each n-gram model
     W = M
-    if not unigram:
+    if n != 1:
         W = {}
         for wi in M:
             for wj in M[wi]:
                 if wi != -1 or wj != -1:
                     W[wi + (wj, )] = M[wi][wj]
-    n = 0
-    while n < 5:
-        X = max(W.items(), key=operator.itemgetter(1))[0]
-        if X and X != -1 and (X[0] if type(X) is tuple else True):
-            if type(X) is tuple:
-                if -1 in X:
-                    del W[X]
-                    continue
-                for x in X:
-                    S += ' ' + (x if x != -1 else '')
-            else:
-                S += ' ' + X
-            n += 1
-        del W[X]
-            
 
-    return S
+    S = []
+    total = 0
+    if n == 1:
+        while total < 5:
+            l = max(W.items(), key=operator.itemgetter(1))[0]
+            if l != -1 and '<l>' not in l and '</l>' not in l:
+                S.append(l[0])
+                total += 1
+            del W[l]
+    else:
+        iter = 3 if total == 2 else 2
+        while total < 2:
+            l = max(W.items(), key=operator.itemgetter(1))[0]
+            if l != -1 and '<l>' not in l and '</l>' not in l:
+                S.append(''.join(l))
+                total += 1
+            del W[l]
+    # randomize letters
+    random.shuffle(S)
+    return ''.join(S)
 
 
 def test_S(Ms):
     print('Generating Sentences...')
-    print('\t Generating Sentence for: 1-gram...')
-    Ss = [gen_S(Ms[0], unigram=True)]
+    print('\tGenerating Sentence for: 1-gram...')
+    Ss = [gen_S(Ms[0], 1)]
     for i, M in enumerate(Ms[1:]):
-        print('\tGenerating Sentence for {}-gram...'.format(i+1))
-        Ss.append(gen_S(M))
+        print('\tGenerating Sentence for {}-gram...'.format(i+2))
+        Ss.append(gen_S(M, i+2))
     return Ss
 
 
+# you can get a sample from a bigger dataset.
 # get_sample('data/trwiki', 'big_sample.txt', N=30)
+
+
 X, Y = split(read_file('sample1.txt'))
-
-
-# M = model(X, 5)
-# S = gen_sentence(M)
-# print(S)
 
 Ms = build_models(X)
 PPs = test_models(Ms, Y)
-Ss = test_S(Ms)
 
 for i, PP in enumerate(PPs):
     print('Perplexity of {}-gram: {}'.format(i + 1, PP))
 
+Ss = test_S(Ms)
 for i, S in enumerate(Ss):
-    print('Sentence for {}-gram: {}'.format(i + 1, S))
+    print('Word for {}-gram: {}'.format(i + 1, S))
