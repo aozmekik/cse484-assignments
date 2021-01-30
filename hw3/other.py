@@ -9,6 +9,7 @@ def get_and_clean(dataset):
     df = pd.read_csv(
         dataset, usecols=['comment', 'Label'], encoding='unicode_escape')
 
+    drop = []
     for index, row in df.iterrows():
         content = row['comment']
         translator = str.maketrans(
@@ -16,29 +17,28 @@ def get_and_clean(dataset):
         content = content.translate(translator)
         content = preprocess(content)
         df.loc[index, 'comment'] = content
-        # row['comment'] = content
+        if not df.loc[index, 'comment']:
+            drop.append(index)
+    df = df.drop(index=drop)
     return np.array(df['comment']), np.array(df['Label'])
 
 
 def get_dataset():
     X_train, y_train = get_and_clean('dataset/train.csv')
     X_test, y_test = get_and_clean('dataset/test.csv')
-    
 
+        
 
-    vectorizer = TfidfVectorizer(max_features=8000)
-    X_train = vectorizer.fit_transform(X_train).toarray()
-    X_test = vectorizer.transform(X_test).toarray()
+    # vectorizer = TfidfVectorizer(max_features=8000)
+    # X_train = vectorizer.fit_transform(X_train).toarray()
+    # X_test = vectorizer.transform(X_test).toarray()
 
-    y_pred = nb(X_train, y_train, X_test, categorical=False)
-    print(f1_score(y_test, y_pred, average='micro'))
-
-    
+    # y_pred = nb(X_train, y_train, X_test, categorical=False)
+    # print(f1_score(y_test, y_pred, average='micro'))
 
     # model = GaussianNB()
     # model.fit(X_train, y_train)
     # y_pred = model.predict(X_test)
-    # # accuracy_score(Y_val, Y_pred)
     # print(f1_score(y_test, y_pred, average='micro'))
 
 

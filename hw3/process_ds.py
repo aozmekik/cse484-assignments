@@ -6,8 +6,12 @@ from unicode_tr import unicode_tr
 from unicode_tr.extras import slugify
 import string
 
-# TODO. make beyaz perde ready for text classifier
-# TODO. find a way to express prob.
+
+def chunks(lst, n):
+    '''Yield successive n-sized chunks from lst.'''
+    for i in range(0, len(lst), n):
+        print('%', 100 * (i / len(lst)))
+        yield lst[i:i + n]
 
 
 def prepare_dataset():
@@ -19,9 +23,14 @@ def prepare_dataset():
         html = file.read()
 
     html = re.sub('<[^>]+>', '', html)
-    html = preprocess(html)
 
-    content = html
+    c = ''
+    for h in chunks(html, int(len(html) / 5)):
+        h = preprocess(h)
+        c += ' ' + h
+    html = c
+
+    content = ''
 
     df: pd.DataFrame = pd.read_csv('dataset/train.csv',
                                    usecols=['comment', 'Label'], encoding='unicode_escape')
@@ -42,13 +51,15 @@ def prepare_dataset():
     content = preprocess(content)
 
     with open('train.txt', 'w') as file:
-        file.write(content)
+        file.write(html + ' ' + content)
 
 
 def preprocess(x):
     x = strip_numbers(x)
     x = remove_punctuation(x)
-    x = unicode_tr(x).lower()
+    # x = unicode_tr(x).lower()
+    x = ' '.join(slugify(x).split('-'))
+    x = re.sub('[^a-zA-Z]+', ' ',  x)
     x = x.strip('\n')
     x = x.replace('\n', ' ')
     x = ' '.join(x.split())  # to remove duplicate of white space
